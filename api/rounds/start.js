@@ -2,7 +2,20 @@
 const { getDb } = require("../_db");
 
 function uuid() { return crypto.randomUUID(); }
-function toRound(r) { return { id: r._id, roomId: r.roomId, roundNumber: r.roundNumber, imposterId: r.imposterId, word: r.word, decoyWord: r.decoyWord, category: r.category, votes: r.votes || {}, votedOutId: r.votedOutId, imposterWon: r.imposterWon, nextImposterId: r.nextImposterId, status: r.status, createdAt: r.createdAt }; }
+
+function toRound(r) {
+  return { id: r._id, roomId: r.roomId, roundNumber: r.roundNumber, imposterId: r.imposterId, word: r.word, decoyWord: r.decoyWord, category: r.category, votes: r.votes || {}, votedOutId: r.votedOutId, imposterWon: r.imposterWon, nextImposterId: r.nextImposterId, status: r.status, createdAt: r.createdAt };
+}
+
+// Fisher-Yates shuffle using crypto random for true randomness
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -17,14 +30,21 @@ module.exports = async (req, res) => {
     const players = await db.collection("players").find({ roomId, isActive: true }).toArray();
     if (players.length < 3) return res.status(400).json({ error: "Need at least 3 players" });
 
+    // Pick a random word pair — also shuffle pairs before picking
     const pairs = await db.collection("wordPairs").find({}).toArray();
-    const pair = pairs[Math.floor(Math.random() * pairs.length)];
+    const shuffledPairs = shuffle(pairs);
+    const pair = shuffledPairs[Math.floor(Math.random() * shuffledPairs.length)];
 
+    // Pick imposter from a shuffled player list to avoid insertion-order bias
     let imposter;
     if (forceImposterId && players.find((p) => p._id === forceImposterId)) {
       imposter = players.find((p) => p._id === forceImposterId);
     } else {
-      imposter = players[Math.floor(Math.random() * players.length)];
+      const shuffled = shuffle(players);
+      // Also use a crypto-strong random index on top of shuffling
+      const idx = Math.floor(Math.random() * shuffled.length);
+      imposter = shuffled[idx];
+      console.log(`Selected imposter: ${imposter.nickname} (index ${idx} of ${shuffled.length} shuffled players)`);
     }
 
     const roundId = uuid();
