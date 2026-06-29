@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Copy, Crown, Eye, EyeOff, LogOut, Play, RotateCcw,
   Skull, Trophy, Users, Vote, Sparkles, CheckCircle2,
 } from "lucide-react";
 import { api, type GameMode, type Player, type Room, type Round, MODE_LABEL, MODE_DESCRIPTION, MODE_EMOJI } from "../lib/api";
-import { getPlayerId, clearPlayerId, recordRound } from "../lib/player";
+import { getPlayerId, setPlayerId, clearPlayerId, recordRound } from "../lib/player";
 import { toast } from "../components/Toaster";
 
 const MODES: GameMode[] = ["classic", "bluff", "chain", "chain_bluff"];
@@ -14,17 +14,27 @@ const POLL_MS = 1800;
 export default function RoomPage() {
   const { code } = useParams<{ code: string }>();
   const nav = useNavigate();
+  const location = useLocation();
   const [room, setRoom] = useState<Room | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [round, setRound] = useState<Round | null>(null);
   const [me, setMe] = useState<Player | null>(null);
   const [missing, setMissing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const myIdRef = useRef<string | null>(getPlayerId(code!));
+  // Get playerId from nav state (immediate) OR localStorage (returning visitor)
+  const myIdRef = useRef<string | null>(
+    (location.state as { playerId?: string } | null)?.playerId ?? getPlayerId(code!)
+  );
 
   useEffect(() => {
-    // Re-read from localStorage in case it was just written
-    myIdRef.current = getPlayerId(code!);
+    // If nav state had playerId, persist it to localStorage now
+    const stateId = (location.state as { playerId?: string } | null)?.playerId;
+    if (stateId) {
+      setPlayerId(code!, stateId);
+      myIdRef.current = stateId;
+    } else {
+      myIdRef.current = getPlayerId(code!);
+    }
     if (!myIdRef.current) { nav("/"); return; }
     poll();
     pollRef.current = setInterval(poll, POLL_MS);
@@ -32,16 +42,16 @@ export default function RoomPage() {
   }, [code]);
 
   async function poll() {
-    const myId = myIdRef.current || getPlayerId(code!);
+    const myId = myIdRef.current;
     if (!myId) { nav("/"); return; }
-    myIdRef.current = myId;
     try {
       const state = await api.pollRoom(code!);
       setRoom(state.room);
       setPlayers(state.players);
       setRound(state.round);
       const mine = state.players.find((p) => p.id === myId) ?? null;
-      if (!mine) { clearPlayerId(code!); nav("/"); return; }
+      // If player not found yet (race condition), just wait for next poll
+      if (!mine) return;
       setMe(mine);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
