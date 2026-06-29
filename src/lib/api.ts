@@ -66,8 +66,8 @@ export const api = {
   joinRoom: (code: string, nickname: string, avatar: string, color: string) =>
     apiFetch<{ room: Room; player: Player }>("/api/rooms/join", { code, nickname, avatar, color }),
 
-  pollRoom: (code: string) =>
-    apiFetch<RoomState>(`/api/rooms/${code}`),
+  pollRoom: (code: string, playerId: string) =>
+    apiFetch<RoomState>(`/api/rooms/${code}?playerId=${encodeURIComponent(playerId)}`),
 
   setMode: (roomId: string, mode: GameMode) =>
     apiFetch("/api/rooms/mode", { roomId, mode }),
