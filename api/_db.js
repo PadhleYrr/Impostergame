@@ -1,38 +1,41 @@
-// api/_db.js — shared MongoDB connection (cached across Vercel function warm invocations)
+// api/_db.js — shared MongoDB connection cached across warm Vercel invocations
+"use strict";
+
 const { MongoClient } = require("mongodb");
 
 const MONGO_URL =
   process.env.MONGO_URL ||
   "mongodb+srv://xaayux:xaayux@cluster0.mojpz.mongodb.net/?appName=Cluster0/";
 
-let client;
-let db;
+let _client = null;
+let _db = null;
 
 async function getDb() {
-  if (db) return db;
-  if (!client) {
-    client = new MongoClient(MONGO_URL, { maxPoolSize: 5 });
-    await client.connect();
+  if (_db) return _db;
+  if (!_client) {
+    _client = new MongoClient(MONGO_URL, { maxPoolSize: 5, serverSelectionTimeoutMS: 5000 });
+    await _client.connect();
   }
-  db = client.db("imposter_party");
+  _db = _client.db("imposter_party");
 
-  // Ensure indexes (idempotent)
-  await db.collection("rooms").createIndex({ code: 1 }, { unique: true });
-  await db.collection("players").createIndex({ roomId: 1 });
-  await db.collection("rounds").createIndex({ roomId: 1 });
+  // Idempotent indexes
+  await _db.collection("rooms").createIndex({ code: 1 }, { unique: true });
+  await _db.collection("players").createIndex({ roomId: 1 });
+  await _db.collection("rounds").createIndex({ roomId: 1 });
 
-  // Seed word pairs if empty
-  const count = await db.collection("wordPairs").countDocuments();
+  // Seed word pairs once
+  const count = await _db.collection("wordPairs").countDocuments();
   if (count === 0) {
-    await db.collection("wordPairs").insertMany(WORD_PAIRS);
+    await _db.collection("wordPairs").insertMany(WORD_PAIRS);
+    console.log("Seeded", WORD_PAIRS.length, "word pairs");
   }
 
-  return db;
+  return _db;
 }
 
 module.exports = { getDb };
 
-// ── Word pairs library ─────────────────────────────────────────────────────
+// ── Word pairs ─────────────────────────────────────────────────────────────
 const WORD_PAIRS = [
   { word: "Coffee", decoy: "Tea", category: "Drinks" },
   { word: "Pizza", decoy: "Flatbread", category: "Food" },
@@ -56,7 +59,6 @@ const WORD_PAIRS = [
   { word: "Tokyo", decoy: "Osaka", category: "Cities" },
   { word: "Harry Potter", decoy: "Fantastic Beasts", category: "Movies" },
   { word: "McDonald's", decoy: "Burger King", category: "Fast Food" },
-  { word: "Titanic", decoy: "The Poseidon Adventure", category: "Movies" },
   { word: "Superman", decoy: "Batman", category: "Superheroes" },
   { word: "WhatsApp", decoy: "Telegram", category: "Apps" },
   { word: "Instagram", decoy: "TikTok", category: "Social Media" },
@@ -64,14 +66,15 @@ const WORD_PAIRS = [
   { word: "Minecraft", decoy: "Roblox", category: "Games" },
   { word: "Coca-Cola", decoy: "Pepsi", category: "Drinks" },
   { word: "Rolls-Royce", decoy: "Bentley", category: "Cars" },
-  { word: "English", decoy: "Spanish", category: "Languages" },
-  { word: "Polar Bear", decoy: "Grizzly Bear", category: "Animals" },
-  { word: "Champagne", decoy: "Prosecco", category: "Drinks" },
   { word: "Cricket", decoy: "Baseball", category: "Sports" },
-  { word: "Passport", decoy: "ID Card", category: "Documents" },
   { word: "Gold", decoy: "Silver", category: "Metals" },
   { word: "Piano", decoy: "Keyboard", category: "Instruments" },
   { word: "Umbrella", decoy: "Raincoat", category: "Accessories" },
   { word: "Helicopter", decoy: "Drone", category: "Aircraft" },
-  { word: "King", decoy: "Emperor", category: "Royalty" },
+  { word: "Chocolate Cake", decoy: "Brownie", category: "Desserts" },
+  { word: "Sunglasses", decoy: "Goggles", category: "Accessories" },
+  { word: "Skyscraper", decoy: "Tower", category: "Buildings" },
+  { word: "Penguin", decoy: "Puffin", category: "Birds" },
+  { word: "Hamburger", decoy: "Cheeseburger", category: "Food" },
+  { word: "Violin", decoy: "Cello", category: "Instruments" },
 ];
