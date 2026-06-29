@@ -1,11 +1,12 @@
-// api/rounds/start.js
+"use strict";
 const { getDb } = require("../_db");
-const { v4: uuid } = require("uuid");
+
+function uuid() { return crypto.randomUUID(); }
+function toRound(r) { return { id: r._id, roomId: r.roomId, roundNumber: r.roundNumber, imposterId: r.imposterId, word: r.word, decoyWord: r.decoyWord, category: r.category, votes: r.votes || {}, votedOutId: r.votedOutId, imposterWon: r.imposterWon, nextImposterId: r.nextImposterId, status: r.status, createdAt: r.createdAt }; }
 
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
   try {
     const db = await getDb();
     const { roomId, forceImposterId } = req.body;
@@ -16,11 +17,9 @@ module.exports = async (req, res) => {
     const players = await db.collection("players").find({ roomId, isActive: true }).toArray();
     if (players.length < 3) return res.status(400).json({ error: "Need at least 3 players" });
 
-    // Pick random word pair
     const pairs = await db.collection("wordPairs").find({}).toArray();
     const pair = pairs[Math.floor(Math.random() * pairs.length)];
 
-    // Pick imposter
     let imposter;
     if (forceImposterId && players.find((p) => p._id === forceImposterId)) {
       imposter = players.find((p) => p._id === forceImposterId);
@@ -28,13 +27,11 @@ module.exports = async (req, res) => {
       imposter = players[Math.floor(Math.random() * players.length)];
     }
 
-    const nextRoundNumber = room.currentRound + 1;
     const roundId = uuid();
-
     const round = {
       _id: roundId,
       roomId,
-      roundNumber: nextRoundNumber,
+      roundNumber: room.currentRound + 1,
       imposterId: imposter._id,
       word: pair.word,
       decoyWord: pair.decoy,
@@ -50,16 +47,12 @@ module.exports = async (req, res) => {
     await db.collection("rounds").insertOne(round);
     await db.collection("rooms").updateOne(
       { _id: roomId },
-      { $set: { status: "playing", currentRound: nextRoundNumber, currentRoundId: roundId } }
+      { $set: { status: "playing", currentRound: round.roundNumber, currentRoundId: roundId } }
     );
 
-    res.status(200).json({ round: mongoToRound(round) });
+    return res.status(200).json({ round: toRound(round) });
   } catch (e) {
-    console.error(e);
+    console.error("start round error:", e);
     res.status(500).json({ error: e.message });
   }
 };
-
-function mongoToRound(r) {
-  return { id: r._id, roomId: r.roomId, roundNumber: r.roundNumber, imposterId: r.imposterId, word: r.word, decoyWord: r.decoyWord, category: r.category, votes: r.votes || {}, votedOutId: r.votedOutId, imposterWon: r.imposterWon, nextImposterId: r.nextImposterId, status: r.status, createdAt: r.createdAt };
-}
