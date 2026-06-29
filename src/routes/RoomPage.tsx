@@ -20,16 +20,21 @@ export default function RoomPage() {
   const [me, setMe] = useState<Player | null>(null);
   const [missing, setMissing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const myId = getPlayerId(code!);
+  const myIdRef = useRef<string | null>(getPlayerId(code!));
 
   useEffect(() => {
-    if (!myId) { nav("/"); return; }
+    // Re-read from localStorage in case it was just written
+    myIdRef.current = getPlayerId(code!);
+    if (!myIdRef.current) { nav("/"); return; }
     poll();
     pollRef.current = setInterval(poll, POLL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [code]);
 
   async function poll() {
+    const myId = myIdRef.current || getPlayerId(code!);
+    if (!myId) { nav("/"); return; }
+    myIdRef.current = myId;
     try {
       const state = await api.pollRoom(code!);
       setRoom(state.room);

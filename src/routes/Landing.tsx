@@ -39,6 +39,8 @@ export default function Landing() {
     try {
       const { room, player } = await api.createRoom(id.nickname, id.avatar, id.color);
       setPlayerId(room.code, player.id);
+      // Small delay ensures localStorage write is flushed before RoomPage mounts
+      await new Promise((r) => setTimeout(r, 50));
       nav(`/room/${room.code}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to create room");
@@ -52,6 +54,7 @@ export default function Landing() {
     try {
       const { room, player } = await api.joinRoom(code.trim(), id.nickname, id.avatar, id.color);
       setPlayerId(room.code, player.id);
+      await new Promise((r) => setTimeout(r, 50));
       nav(`/room/${room.code}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Room not found");
