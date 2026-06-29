@@ -1,9 +1,35 @@
 "use strict";
 const { getDb } = require("../_db");
 
-function toRoom(r) { return { id: r._id, code: r.code, hostId: r.hostId, mode: r.mode, status: r.status, currentRound: r.currentRound, currentRoundId: r.currentRoundId, createdAt: r.createdAt }; }
-function toPlayer(p) { return { id: p._id, roomId: p.roomId, nickname: p.nickname, avatar: p.avatar, color: p.color, score: p.score, isActive: p.isActive, joinedAt: p.joinedAt }; }
-function toRound(r) { return { id: r._id, roomId: r.roomId, roundNumber: r.roundNumber, imposterId: r.imposterId, word: r.word, decoyWord: r.decoyWord, category: r.category, votes: r.votes || {}, votedOutId: r.votedOutId, imposterWon: r.imposterWon, nextImposterId: r.nextImposterId, status: r.status, createdAt: r.createdAt }; }
+function toRoom(r) {
+  return { id: r._id, code: r.code, hostId: r.hostId, mode: r.mode, status: r.status, currentRound: r.currentRound, currentRoundId: r.currentRoundId, createdAt: r.createdAt };
+}
+function toPlayer(p) {
+  return { id: p._id, roomId: p.roomId, nickname: p.nickname, avatar: p.avatar, color: p.color, score: p.score, isActive: p.isActive, joinedAt: p.joinedAt };
+}
+function toRound(r, requestingPlayerId) {
+  const isImposter = r.imposterId === requestingPlayerId;
+  const revealed = r.status === "results"; // after voting, reveal everything
+
+  return {
+    id: r._id,
+    roomId: r.roomId,
+    roundNumber: r.roundNumber,
+    // Only expose imposterId after results — otherwise imposter can see they're picked
+    imposterId: revealed ? r.imposterId : (isImposter ? r.imposterId : null),
+    // Everyone gets word; imposter gets decoyWord; after results reveal both
+    word: revealed ? r.word : (isImposter ? r.decoyWord : r.word),
+    // decoyWord only shown to imposter during reveal, or to all after results
+    decoyWord: revealed ? r.decoyWord : (isImposter ? r.word : null),
+    category: r.category,
+    votes: r.votes || {},
+    votedOutId: r.votedOutId,
+    imposterWon: r.imposterWon,
+    nextImposterId: r.nextImposterId,
+    status: r.status,
+    createdAt: r.createdAt,
+  };
+}
 
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -11,6 +37,7 @@ module.exports = async (req, res) => {
   try {
     const db = await getDb();
     const code = (req.query.code || "").toUpperCase();
+    const playerId = req.query.playerId || null;
     if (!code) return res.status(400).json({ error: "Code required" });
 
     const room = await db.collection("rooms").findOne({ code });
@@ -20,13 +47,14 @@ module.exports = async (req, res) => {
 
     let round = null;
     if (room.currentRoundId) {
-      round = await db.collection("rounds").findOne({ _id: room.currentRoundId });
+      const rawRound = await db.collection("rounds").findOne({ _id: room.currentRoundId });
+      if (rawRound) round = toRound(rawRound, playerId);
     }
 
     return res.status(200).json({
       room: toRoom(room),
       players: players.map(toPlayer),
-      round: round ? toRound(round) : null,
+      round,
     });
   } catch (e) {
     console.error("poll error:", e);
