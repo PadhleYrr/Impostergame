@@ -45,7 +45,7 @@ export default function RoomPage() {
     const myId = myIdRef.current;
     if (!myId) { nav("/"); return; }
     try {
-      const state = await api.pollRoom(code!);
+      const state = await api.pollRoom(code!, myId);
       setRoom(state.room);
       setPlayers(state.players);
       setRound(state.round);
@@ -257,13 +257,14 @@ function RevealView({ room, me, round, isHost, onRefresh }: {
 }) {
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
-  const isImposter = round.imposterId === me.id;
+  // Server already sends the correct word per player:
+  // - non-imposters: round.word = real word, round.decoyWord = null
+  // - imposters: round.word = their decoy word, round.decoyWord = real word (bluff) or null
+  const isImposter = round.imposterId === me.id;  // null if non-imposter (server hides it)
   const isBluffMode = room.mode === "bluff" || room.mode === "chain_bluff";
   const isChainMode = room.mode === "chain" || room.mode === "chain_bluff";
   const knowsTheyreImposter = isImposter && (isBluffMode || isChainMode);
-  const displayWord = isImposter
-    ? isBluffMode ? round.word : round.decoyWord
-    : round.word;
+  const displayWord = round.word; // server sends the right word for this player
 
   const onVoting = async () => {
     setBusy(true);
@@ -529,12 +530,12 @@ function ResultsView({ room, players, me, round, isHost, onRefresh }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/5 rounded-xl p-2.5">
-            <div className="text-[10px] uppercase tracking-widest text-white/30">Real word</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/30">Everyone got</div>
             <div className="font-bold text-white mt-0.5">{round.word}</div>
           </div>
           <div className="bg-white/5 rounded-xl p-2.5">
-            <div className="text-[10px] uppercase tracking-widest text-white/30">Imposter word</div>
-            <div className="font-bold text-pink-300 mt-0.5">{round.decoyWord}</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/30">Imposter got</div>
+            <div className="font-bold text-pink-300 mt-0.5">{round.decoyWord ?? "?"}</div>
           </div>
         </div>
         <div className="text-xs text-white/40 mt-3">
