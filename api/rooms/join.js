@@ -1,15 +1,16 @@
-// api/rooms/join.js
+"use strict";
 const { getDb } = require("../_db");
-const { v4: uuid } = require("uuid");
+
+function uuid() { return crypto.randomUUID(); }
+function toRoom(r) { return { id: r._id, code: r.code, hostId: r.hostId, mode: r.mode, status: r.status, currentRound: r.currentRound, currentRoundId: r.currentRoundId, createdAt: r.createdAt }; }
+function toPlayer(p) { return { id: p._id, roomId: p.roomId, nickname: p.nickname, avatar: p.avatar, color: p.color, score: p.score, isActive: p.isActive, joinedAt: p.joinedAt }; }
 
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
   try {
     const db = await getDb();
     const { code, nickname, avatar, color } = req.body;
-
     if (!code || !nickname) return res.status(400).json({ error: "Code and nickname required" });
 
     const room = await db.collection("rooms").findOne({ code: code.toUpperCase() });
@@ -26,22 +27,10 @@ module.exports = async (req, res) => {
       isActive: true,
       joinedAt: new Date().toISOString(),
     };
-
     await db.collection("players").insertOne(player);
-
-    res.status(200).json({
-      room: mongoToRoom(room),
-      player: mongoToPlayer(player),
-    });
+    return res.status(200).json({ room: toRoom(room), player: toPlayer(player) });
   } catch (e) {
-    console.error(e);
+    console.error("join error:", e);
     res.status(500).json({ error: e.message });
   }
 };
-
-function mongoToRoom(r) {
-  return { id: r._id, code: r.code, hostId: r.hostId, mode: r.mode, status: r.status, currentRound: r.currentRound, currentRoundId: r.currentRoundId, createdAt: r.createdAt };
-}
-function mongoToPlayer(p) {
-  return { id: p._id, roomId: p.roomId, nickname: p.nickname, avatar: p.avatar, color: p.color, score: p.score, isActive: p.isActive, joinedAt: p.joinedAt };
-}
